@@ -4,12 +4,69 @@ require "rails/all"
 
 # Require the gems listed in Gemfile, including any gems
 # you've limited to :test, :development, or :production.
+class SessionAuthenticator
+  def initialize(app)
+    @app = app
+  end
+
+  def call(env)
+    request = Rack::Request.new(env)
+
+    # check if the request is to log in or refresh the session
+    if request.path_info == '/api/v1/login' || request.path_info == '/api/v1/refresh_session'
+      # don't check session token for login and refresh_session requests
+      @app.call(env)
+    else
+      # check session token for all other requests
+      if request.cookies['session_token'].present?
+        user = User.find_by_session_token(request.cookies['session_token'])
+        if user.present?
+          # set user in the request for future use
+          env['user'] = user
+          # refresh session token expiration time
+          user.refresh_session_token_expiry
+          # call the app
+          @app.call(env)
+        else
+          # invalid session token
+          [401, {'Content-Type' => 'application/json'}, [{error: 'Unauthorized'}.to_json]]
+        end
+      else
+        # no session token provided
+        [401, {'Content-Type' => 'application/json'}, [{error: 'Unauthorized'}.to_json]]
+      end
+    end
+  end
+end
+
+class UserSessionMiddleware
+  def initialize(app)
+    @app = app
+  end
+  
+  def call(env)
+    if env["HTTP_X_USER_SESSION_TOKEN"].present?
+      user = User.find_by(session_token: env["HTTP_X_USER_SESSION_TOKEN"])
+      
+      if user.present? && user.session_token_expiry > Time.now
+        env["X_CURRENT_USER"] = user
+      end
+    end
+    
+    @app.call(env)
+  end
+end
+
 Bundler.require(*Rails.groups)
+
 
 module Gali
   class Application < Rails::Application
+    
     # Initialize configuration defaults for originally generated Rails version.
+    config.autoload_paths << "#{Rails.root}/app/middleware"
     config.load_defaults 7.0
+
 
     # Configuration for the application, engines, and railties goes here.
     #
@@ -19,9 +76,11 @@ module Gali
     # config.time_zone = "Central Time (US & Canada)"
     # config.eager_load_paths << Rails.root.join("extras")
 
-    # Only loads a smaller set of middleware suitable for API only apps.
-    # Middleware like session, flash, cookies can be added back manually.
-    # Skip views, helpers and assets when generating a new resource.
+    
     config.api_only = true
+
+    # config.middleware.use SessionAuthenticator
+    Rails.application.config.middleware.use SessionAuthenticator
+    Rails.application.config.middleware.use UserSessionMiddleware
   end
 end

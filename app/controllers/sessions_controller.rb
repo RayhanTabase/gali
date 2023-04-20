@@ -3,6 +3,13 @@ class SessionsController < ApplicationController
     user = User.find_by(email: params[:email])
     if user && user.authenticate(params[:password])
       session[:user_id] = user.id
+      session_token = user.generate_session_token
+      puts session_token
+      cookies[:session_token] = {
+        value: session_token,
+        expires: user.session_token_expiry,
+        httponly: true
+      }
       render json: { message: 'Logged in successfully' }, status: :ok
     else
       render json: { message: 'Invalid email or password' }, status: :unauthorized

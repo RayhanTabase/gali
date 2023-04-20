@@ -4,17 +4,18 @@ require "rails/all"
 
 # Require the gems listed in Gemfile, including any gems
 # you've limited to :test, :development, or :production.
+
 class SessionAuthenticator
-  def initialize(app)
+  def initialize(app, except_paths = [])
     @app = app
+    @except_paths = except_paths
   end
 
   def call(env)
     request = Rack::Request.new(env)
 
-    # check if the request is to log in or refresh the session
-    if request.path_info == '/api/v1/login' || request.path_info == '/api/v1/refresh_session'
-      # don't check session token for login and refresh_session requests
+    # check if the request is to log in or create a new user
+    if @except_paths.include?(request.path_info)
       @app.call(env)
     else
       # check session token for all other requests
@@ -79,8 +80,10 @@ module Gali
     
     config.api_only = true
 
-    # config.middleware.use SessionAuthenticator
-    Rails.application.config.middleware.use SessionAuthenticator
+    # configure session
+    config.middleware.use ActionDispatch::Session::CookieStore
+    Rails.application.config.session_store :cookie_store, key: '_gali_session'
+    Rails.application.config.middleware.use SessionAuthenticator, ["/login"]
     Rails.application.config.middleware.use UserSessionMiddleware
   end
 end

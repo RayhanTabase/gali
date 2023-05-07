@@ -83,7 +83,7 @@ module Gali
     # configure session
     config.middleware.use ActionDispatch::Session::CookieStore
     Rails.application.config.session_store :cookie_store, key: '_gali_session'
-    Rails.application.config.middleware.use SessionAuthenticator, ["/login"]
-    Rails.application.config.middleware.use UserSessionMiddleware
+    # Rails.application.config.middleware.use SessionAuthenticator
+    # Rails.application.config.middleware.use UserSessionMiddleware
   end
 end
